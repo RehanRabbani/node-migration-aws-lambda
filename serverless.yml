@@ -1,0 +1,230 @@
+service: migration-careplan
+# variablesResolutionMode: 20210326
+
+custom:
+  stage: ${opt:stage, self:provider.stage}
+  queueArn: 'arn:aws:sqs:${self:provider.region}:${aws:accountId}:${self:provider.stage}-migration-cp-queue.fifo'
+  deploymentBucket:
+    prod: 's37-prod-lambda'
+    intval: 's37-val-lambda'
+    extval: 's37-val-lambda'
+    dev1: 's37-dev-lambda'
+    dev2: 's37-dev-lambda'
+    stage: 's37-dev-lambda'
+    prod-eu-de: 's37-prod-lambda-eu'
+    intval-eu-de: 's37-val-lambda-eu'
+    extval-eu-de: 's37-val-lambda-eu'
+    dev1-eu-de: 's37-dev-lambda-eu'
+    dev2-eu-de: 's37-dev-lambda-eu'
+    stage-eu-de: 's37-dev-lambda-eu'
+  profiles:
+    dev1: 'default'
+    dev2: 'default'
+    stage: 'default'
+    prod: 'production'
+    intval: 'production'
+    extval: 'production'
+    prod-eu-de: 'production'
+    intval-eu-de: 'production'
+    extval-eu-de: 'production'
+    dev1-eu-de: 'default'
+    dev2-eu-de: 'default'
+    stage-eu-de: 'default'
+  regions:
+    prod: 'us-west-2'
+    intval: 'us-west-2'
+    extval: 'us-west-2'
+    dev1: 'us-west-2'
+    dev2: 'us-west-2'
+    stage: 'us-west-2'
+    prod-eu-de: 'eu-central-1'
+    intval-eu-de: 'eu-central-1'
+    extval-eu-de: 'eu-central-1'
+    dev1-eu-de: 'eu-central-1'
+    dev2-eu-de: 'eu-central-1'
+    stage-eu-de: 'eu-central-1'
+  serviceRegions:
+    prod: 'us-w2'
+    intval: 'us-w2'
+    extval: 'us-w2'
+    dev1: 'us-w2'
+    dev2: 'us-w2'
+    stage: 'us-w2'
+    prod-eu-de: 'de-c1'
+    intval-eu-de: 'de-c1'
+    extval-eu-de: 'de-c1'
+    dev1-eu-de: 'de-c1'
+    dev2-eu-de: 'de-c1'
+    stage-eu-de: 'de-c1'
+  hostEnvs:
+    prod: 'science37'
+    intval: 'science37'
+    extval: 'science37'
+    dev1: 's37dev'
+    dev2: 's37dev'
+    stage: 's37dev'
+    prod-eu-de: 'science37'
+    intval-eu-de: 'science37'
+    extval-eu-de: 'science37'
+    dev1-eu-de: 's37dev'
+    dev2-eu-de: 's37dev'
+    stage-eu-de: 's37dev'
+provider:
+  name: aws
+  profile: ${self:custom.profiles.${opt:stage, self:provider.stage}}
+  # deploymentBucket: ${self:custom.deploymentBucket.${opt:stage, self:provider.stage}}
+  # loadBalancer: ${self:custom.loadBalancers.${opt:stage, self:provider.stage}}
+  hostEnv: ${self:custom.hostEnvs.${opt:stage, self:provider.stage}}
+  runtime: nodejs16.x
+  region: ${self:custom.regions.${opt:stage, self:provider.stage}}
+  stage: ${opt:stage, 'dev2'}
+  deploymentPrefix: serverless
+  timeout: 30
+  environment:
+    NODE_ENV: ${self:provider.stage}
+    SHA: ${opt:SHA, 'unknown'}
+    REGION: ${self:provider.region}
+    SERVICE_REGION: ${self:custom.serviceRegions.${opt:stage, self:provider.stage}}
+    GLOBAL_REGIONAL: ${self:custom.globalRegional.${opt:stage, self:provider.stage}, 'global'}
+    HOST_ENV: ${self:provider.hostEnv}
+  vpc:
+    securityGroupIds: ${ssm:/terraform-output/${self:provider.stage}/vpc/security-groups/default/id/value}
+    subnetIds: ${ssm:/terraform-output/${self:provider.stage}/vpc/subnets/private/ids/value}
+  # iamManagedPolicies:
+  #   - arn:aws:iam::${aws:accountId}:policy/${self:provider.stage}-assume-tenant-roles-policy
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+        - logs:DescribeLogStreams
+      Resource:
+        - 'Fn::Join':
+            - ':'
+            - - 'arn:aws:logs'
+              - Ref: 'AWS::Region'
+              - Ref: 'AWS::AccountId'
+              - 'log-group:/${self:provider.stage}/bre/lambda/${self:service}*:*:*'
+
+    - Effect: 'Allow'
+      Action:
+        # - "sqs:SendMessage"
+        - 'sqs:ReceiveMessage'
+        - 'sqs:GetQueueUrl'
+        - 'sqs:GetQueueAttributes'
+      Resource: ${self:custom.queueArn}
+    - Effect: 'Allow'
+      Action:
+        - 'sqs:ListQueues'
+      Resource: ${self:custom.queueArn}
+
+    # - Effect: 'Allow'
+    #   Action:
+    #     - 'sqs:SendMessage'
+    #    queue-dlq - 'sqs:ReceiveMessage'
+    #     - 'sqs:GetQueueUrl'
+    #     - 'sqs:GetQueueAttributes'
+    #   Resource: arn:aws:sqs:${self:provider.region}:${aws:accountId}:${self:provider.stage}-sqs-care-plan-migration-queue-dlq
+    # - Effect: 'Allow'
+    #   Action:
+    #     - 'sqs:ListQueues'
+    #   Resource: arn:aws:sqs:${self:provider.region}:${aws:accountId}:${self:provider.stage}-sqs-care-plan-migration-
+
+# useDotenv: true
+plugins:
+  - serverless-esbuild
+  - serverless-offline
+  # - serverless-plugin-lambda-dead-letter
+
+# package:
+#   exclude:
+#     - README.md
+#     - serverless.yml
+#     - database.json
+#     - migrations/**
+#     - node_modules/**/aws-sdk/**
+#     - node_modules/**/README.*
+#     - node_modules/**/test/*
+#     - docs/**
+#     - logs/**
+#     - test/**
+#     - .env
+#   patterns: public/**
+
+functions:
+  asyncHandler:
+    handler: src/handlers/migration-handler.handler
+    events:
+      - sqs:
+          arn: ${self:custom.queueArn}
+          batchSize: 1
+    # deadLetterQueue:
+    #   targetArn: arn:aws:sqs:${self:provider.region}:${aws:accountId}:${self:provider.stage}-sqs-care-plan-migration-queue-dlq
+    #   maxRetryAttempts: 3
+    retry:
+      count: 3
+
+resources:
+  Resources:
+    LogGroupPolicy:
+      Type: AWS::IAM::ManagedPolicy
+      Properties:
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource:
+                - 'Fn::Join':
+                    - ':'
+                    - - 'arn:aws:logs'
+                      - Ref: 'AWS::Region'
+                      - Ref: 'AWS::AccountId'
+                      - 'log-group:/aws/lambda/*:*:*'
+
+    SQSTriggerPolicy:
+      Type: AWS::IAM::ManagedPolicy
+      Properties:
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:DeleteMessage
+                - sqs:GetQueueAttributes
+                - sqs:ReceiveMessage
+              Resource:
+                - arn:aws:sqs:${self:provider.region}:${aws:accountId}:${self:provider.stage}-migration-cp-queue.fifo
+
+    # DeadSQSTriggerPolicy:
+    #   Type: AWS::IAM::ManagedPolicy
+    #   Properties:
+    #     PolicyDocument:
+    #       Version: '2012-10-17'
+    #       Statement:
+    #         - Effect: Allow
+    #           Action:
+    #             - sqs:SendMessage
+    #             - sqs:DeleteMessage
+    #             - sqs:GetQueueAttributes
+    #             - sqs:ReceiveMessage
+    #           Resource:
+    #             - arn:aws:sqs:us-west-2:125900505984:dev2-sqs-care-plan-migration-queue-dlq
+    DefaultRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          # - !Ref DeadSQSTriggerPolicy
+          - !Ref SQSTriggerPolicy
